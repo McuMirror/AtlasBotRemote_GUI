@@ -12,9 +12,11 @@ TARGET = AtlasBotRemote_GUI
 TEMPLATE = app
 
 
-SOURCES += main.cpp\
-        atlasbotremote.cpp
+SOURCES += GUI/atlasbotremote.cpp \
+           GUI/main.cpp \
+    GUI/dialogpreferences.cpp
 
-HEADERS  += atlasbotremote.h
-
-FORMS    += atlasbotremote.ui
+HEADERS  += GUI/atlasbotremote.h \
+    GUI/dialogpreferences.h
+FORMS    += GUI/atlasbotremote.ui \
+    GUI/dialogpreferences.ui
