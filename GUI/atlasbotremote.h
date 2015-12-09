@@ -4,7 +4,9 @@
 #include <QMainWindow>
 #include <QSettings>
 
-#include "GUI/dialogpreferences.h"
+#include "dialogpreferences.h"
+
+#include "../PROCESS/qmodbustcp.h"
 
 namespace Ui {
 class AtlasBotRemote;
@@ -28,6 +30,7 @@ class AtlasBotRemote : public QMainWindow
 
         QSettings *_pSettings;
         DialogPreferences *_pDialogPref;
+        QModbusTCP *_pModbusTCP;
 };
 
 #endif // ATLASBOTREMOTE_H

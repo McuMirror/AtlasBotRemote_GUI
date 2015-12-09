@@ -14,9 +14,20 @@ TEMPLATE = app
 
 SOURCES += GUI/atlasbotremote.cpp \
            GUI/main.cpp \
-    GUI/dialogpreferences.cpp
+    GUI/dialogpreferences.cpp \
+    PROCESS/qmodbustcp.cpp
 
 HEADERS  += GUI/atlasbotremote.h \
-    GUI/dialogpreferences.h
+    GUI/dialogpreferences.h \
+    LIB/modbus.h \
+    LIB/modbus-rtu.h \
+    LIB/modbus-tcp.h \
+    LIB/modbus-version.h \
+    PROCESS/qmodbustcp.h
 FORMS    += GUI/atlasbotremote.ui \
     GUI/dialogpreferences.ui
+
+unix:!macx: LIBS += -L$$PWD/LIB/ -lModbus
+
+INCLUDEPATH += $$PWD/LIB
+DEPENDPATH += $$PWD/LIB

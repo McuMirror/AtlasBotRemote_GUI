@@ -20,6 +20,8 @@ AtlasBotRemote::AtlasBotRemote(QWidget *parent) :
     _pDialogPref = new DialogPreferences(this);
     connect(ui->action_Settings, SIGNAL(triggered(bool)), this, SLOT(ShowPrefDialog()));
 
+    /* Init Modbus TCP */
+    _pModbusTCP = new QModbusTCP();
 }
 
 void AtlasBotRemote::ShowPrefDialog()
@@ -42,4 +44,6 @@ void AtlasBotRemote::ShowPrefDialog()
 AtlasBotRemote::~AtlasBotRemote()
 {
     delete ui;
+    delete _pDialogPref;
+    delete _pModbusTCP;
 }
