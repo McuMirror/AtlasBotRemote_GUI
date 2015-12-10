@@ -7,7 +7,7 @@
 #include <QQueue>
 #include <QMutex>
 
-//#include "dicoModbus.h"
+#include "dicoModbus.h"
 #include "../LIB/modbus.h"
 
 class QModbusTCP : public QThread
@@ -15,7 +15,7 @@ class QModbusTCP : public QThread
         Q_OBJECT
 
 #define MODBUS_DELAY_REFRESH        100
-#define MODBUS_NB_RAM_ACQUIS        36
+#define MODBUS_NB_RAM_ACQUIS        MODBUS_READ_ONLY_REG_SIZE
 
         enum eMBErrorCode
         {
@@ -33,7 +33,6 @@ class QModbusTCP : public QThread
         {
             e_CommandList_Default,
             e_CommandList_Connection,
-            e_CommandList_AdvIdent,
             e_CommandList_ReadRegisters,
             e_CommandList_WriteRegisters,
             e_CommandList_Disconnect
@@ -53,12 +52,15 @@ class QModbusTCP : public QThread
         ~QModbusTCP();
 
         void setRemoteHost(QString remoteHost);
+        inline QString remoteHost(void) const {return _remoteHost;}
         void setRemotePort(int remotePort);
+        inline int remotePort(void) const {return _remotePort;}
 
         void openTCPAndConnect(void);
         void disconnect(void);
-        bool isConnected(void);
-        bool isNoComError(void);
+        inline bool isConnected(void) const {return _isConnected;}
+        inline bool isPresent(void) const {return _isPresent;}
+        inline bool noComError(void) const {return _noComError;}
         bool readRegisters(uint16_t moduleId, uint16_t startAddr, uint16_t length);
         void getDataRead(QList<uint16_t> &dataRead);
         void getDataRead(uint16_t* dataRead, uint16_t count);
@@ -73,23 +75,17 @@ class QModbusTCP : public QThread
 
     public slots:
         void run();
-        void DeviceConnected(QString);
+        void DeviceConnected(QString peerName);
         void DeviceDisconnected();
-
-    private:
-        void rawData_safeClear(void);
-        int rawData_safeCount(void);
-        QByteArray &rawData_safeAppend(const QByteArray &a);
 
     signals:
         void Done(int);
         void ComError(QString);
-        void BlueConnected(QString);
-        void BlueDisconnected();
+        void TCPConnected(QString);
+        void TCPDisconnected();
 
     private slots:
         void RepeatingProcess(void);
-        void RawDataReceived(QByteArray);
 
     private:
         modbus_t* _pModBus;
@@ -99,8 +95,8 @@ class QModbusTCP : public QThread
         QMutex *_pMutexRawData, *_pMutexDataRead, *_pMutexAcqData;
         eMBErrorCode _lastError;
         bool _isConnected;
+        bool _isPresent;
         bool _isProcessing;
-        QByteArray _rawData;
         QQueue<s_AccessingElm> _accessingParamsQueue;
         s_AccessingElm _curAccessingParams;
         QList<uint16_t> _dataRead;

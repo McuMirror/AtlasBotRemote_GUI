@@ -23,7 +23,8 @@ HEADERS  += GUI/atlasbotremote.h \
     LIB/modbus-rtu.h \
     LIB/modbus-tcp.h \
     LIB/modbus-version.h \
-    PROCESS/qmodbustcp.h
+    PROCESS/qmodbustcp.h \
+    PROCESS/dicoModbus.h
 FORMS    += GUI/atlasbotremote.ui \
     GUI/dialogpreferences.ui
 
