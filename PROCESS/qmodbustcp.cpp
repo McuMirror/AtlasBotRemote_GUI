@@ -19,18 +19,16 @@ QModbusTCP::QModbusTCP() :
     _pMutexRawData = new QMutex(QMutex::Recursive);
     _pMutexDataRead = new QMutex(QMutex::Recursive);
     _pMutexAcqData = new QMutex(QMutex::Recursive);
+    _pMutexQueue = new QMutex(QMutex::Recursive);
 
     _lastError = MB_ENOERR;
     _accessingParamsQueue.clear();
     _isConnected = false;
     _isPresent = false;
     _noComError = true;
-    _isProcessing = false;
     _dataRead.clear();
     _moduleIdentList.clear();
 
-    connect(this, SIGNAL(finished()), this, SLOT(RepeatingProcess()));
-    _isProcessing = true;
     start(QThread::TimeCriticalPriority);
 }
 
@@ -46,6 +44,8 @@ void QModbusTCP::setRemotePort(int remotePort)
 
 void QModbusTCP::openTCPAndConnect(void)
 {
+    QMutexLocker locker(_pMutexQueue);
+
     if(_isConnected)
     {
         s_AccessingElm tmp;
@@ -63,6 +63,8 @@ void QModbusTCP::openTCPAndConnect(void)
 void QModbusTCP::disconnect(void)
 {
     s_AccessingElm tmp;
+    QMutexLocker locker(_pMutexQueue);
+
     tmp.command = e_CommandList_Disconnect;
     _accessingParamsQueue.enqueue(tmp);
 }
@@ -71,6 +73,7 @@ bool QModbusTCP::readRegisters(uint16_t moduleId, uint16_t startAddr, uint16_t l
 {
     bool ret = false;
     s_AccessingElm tmp;
+    QMutexLocker locker(_pMutexQueue);
 
     tmp.moduleId = moduleId;
     tmp.startAddr = startAddr;
@@ -114,6 +117,7 @@ bool QModbusTCP::writeRegisters(uint16_t moduleId, uint16_t startAddr, uint16_t 
 {
     bool ret = false;
     s_AccessingElm tmp;
+    QMutexLocker locker(_pMutexQueue);
 
     tmp.moduleId = moduleId;
     tmp.startAddr = startAddr;
@@ -134,6 +138,7 @@ bool QModbusTCP::writeRegisters(uint16_t moduleId, uint16_t startAddr, QList<uin
 {
     bool ret = false;
     s_AccessingElm tmp;
+    QMutexLocker locker(_pMutexQueue);
 
     tmp.moduleId = moduleId;
     tmp.startAddr = startAddr;
@@ -169,150 +174,164 @@ void QModbusTCP::run()
 {
     uint16_t data[128];
     int nbReadWrite;
+    QMutexLocker locker(_pMutexQueue);
+    locker.unlock();
 
-    switch(_curAccessingParams.command)
+    while(1)
     {
-        case e_CommandList_Connection:
-            /* Si deja connecte */
-            if(_isConnected)
-                modbus_close(_pModBus);
-
-            _isConnected = false;
-            _pModBus = modbus_new_tcp(_remoteHost.toUtf8().constData(),_remotePort);
-
-            if(modbus_connect(_pModBus) != -1)
-            {
-                _isConnected = true;
-            }
-            break;
-        case e_CommandList_Disconnect:
-            modbus_close(_pModBus);
-            _isConnected = false;
-//            _devAddr = "";
-//            _devName = "";
-            _noComError = true;
-            emit TCPDisconnected();
-            break;
-        case e_CommandList_ReadRegisters:
-            if(_isConnected)
-            {
-                __log() << "MODBUS Reading Registers at " << QString::number(_curAccessingParams.startAddr);
-                nbReadWrite = modbus_read_registers(_pModBus,
-                                                    _curAccessingParams.startAddr,
-                                                    _curAccessingParams.length,
-                                                    data);
-                _noComError = false;
-                if(nbReadWrite > 0)
-                {
-                    _noComError = true;
-                    QMutexLocker locker(_pMutexDataRead);
-                    _dataRead.clear();
-                    for(int i = 0; i<_curAccessingParams.length; i++)
-                        _dataRead.append(data[i]);
-                }
-            }
-            break;
-        case e_CommandList_WriteRegisters:
-            if(_isConnected)
-            {
-                __log() << "MODBUS Writing Registers at " << QString::number(_curAccessingParams.startAddr);
-
-                for(int i=0;i<_curAccessingParams.dataToWrite.count();i++)
-                    data[i] = _curAccessingParams.dataToWrite.at(i);
-
-                nbReadWrite = modbus_write_registers(_pModBus,
-                                                    _curAccessingParams.startAddr,
-                                                    _curAccessingParams.length,
-                                                    data);
-                _noComError = false;
-                if(nbReadWrite > 0)
-                {
-                    _noComError = true;
-                }
-            }
-            break;
-        default:
-            _isPresent = false;
-            if(_isConnected)
-            {
-
-                nbReadWrite = modbus_read_registers(_pModBus, MODBUS_READ_ONLY_REG_START_ADDR, MODBUS_NB_RAM_ACQUIS, data);
-                _noComError = false;
-                if(nbReadWrite > 0)
-                {
-                    _noComError = true;
-                    QMutexLocker locker(_pMutexAcqData);
-                    _isPresent = true;
-                    _acqData.clear();
-                    for(int i = 0; i<MODBUS_NB_RAM_ACQUIS; i++)
-                        _acqData.append(data[i]);
-                }
-            }
-            break;
-    }
-
-    if(_curAccessingParams.command != e_CommandList_Default)
-        __log() << "MODBUS Command Done : " << QString::number((int)_curAccessingParams.command);
-
-    if(_curAccessingParams.command != e_CommandList_Default || _isConnected)
-    {
-        emit Done((int)_curAccessingParams.command +
-                  ((int)_curAccessingParams.moduleId << 8) +
-                  ((!_noComError) << 15));
-    }
-
-    if(!_noComError)
-    {
-        QString errorString;
-        _lastError = (eMBErrorCode)(errno - MODBUS_ENOBASE);
-        switch(_lastError)
+        locker.relock();
+        if(_accessingParamsQueue.isEmpty())
         {
-            case MB_ENOERR:
-                errorString = "No error";
+            _curAccessingParams.moduleId = 0;
+            _curAccessingParams.command = e_CommandList_Default;
+        }
+        else
+        {
+            _curAccessingParams = _accessingParamsQueue.dequeue();
+        }
+        locker.unlock();
+
+        switch(_curAccessingParams.command)
+        {
+            case e_CommandList_Connection:
+                /* Si deja connecte */
+                if(_isConnected)
+                    modbus_close(_pModBus);
+
+                _isConnected = false;
+                _pModBus = modbus_new_tcp(_remoteHost.toUtf8().constData(),_remotePort);
+
+                if(modbus_connect(_pModBus) != -1)
+                {
+                    _isConnected = true;
+                }
                 break;
-            case MB_ENOREG:
-                errorString = "Illegal register address";
+            case e_CommandList_Disconnect:
+                modbus_close(_pModBus);
+                _isConnected = false;
+    //            _devAddr = "";
+    //            _devName = "";
+                _noComError = true;
+                emit TCPDisconnected();
                 break;
-            case MB_EINVAL:
-                errorString = "Illegal argument";
+            case e_CommandList_ReadRegisters:
+                if(_isConnected)
+                {
+                    __log() << "MODBUS Reading Registers at " << QString::number(_curAccessingParams.startAddr);
+                    nbReadWrite = modbus_read_registers(_pModBus,
+                                                        _curAccessingParams.startAddr,
+                                                        _curAccessingParams.length,
+                                                        data);
+                    _noComError = false;
+                    if(nbReadWrite > 0)
+                    {
+                        _noComError = true;
+                        QMutexLocker locker(_pMutexDataRead);
+                        _dataRead.clear();
+                        for(int i = 0; i<_curAccessingParams.length; i++)
+                            _dataRead.append(data[i]);
+                    }
+                }
                 break;
-            case MB_EPORTERR:
-                errorString = "Porting layer error";
-                break;
-            case MB_ENORES:
-                errorString = "Insufficient resources";
-                break;
-            case MB_EIO:
-                errorString = "I/O error";
-                break;
-            case MB_EILLSTATE:
-                errorString = "Protocol stack in illegal state";
-                break;
-            case MB_ETIMEDOUT:
-                errorString = "Timeout !";
+            case e_CommandList_WriteRegisters:
+                if(_isConnected)
+                {
+                    __log() << "MODBUS Writing Registers at " << QString::number(_curAccessingParams.startAddr);
+
+                    for(int i=0;i<_curAccessingParams.dataToWrite.count();i++)
+                        data[i] = _curAccessingParams.dataToWrite.at(i);
+
+                    nbReadWrite = modbus_write_registers(_pModBus,
+                                                        _curAccessingParams.startAddr,
+                                                        _curAccessingParams.length,
+                                                        data);
+                    _noComError = false;
+                    if(nbReadWrite > 0)
+                    {
+                        _noComError = true;
+                    }
+                }
                 break;
             default:
-                _lastError = MB_ETIMEDOUT;
-                errorString = "Unknown error !";
+                _isPresent = false;
+                if(_isConnected)
+                {
+
+                    nbReadWrite = modbus_read_registers(_pModBus, MODBUS_READ_ONLY_REG_START_ADDR, MODBUS_NB_RAM_ACQUIS, data);
+                    _noComError = false;
+                    if(nbReadWrite > 0)
+                    {
+                        _noComError = true;
+                        QMutexLocker locker(_pMutexAcqData);
+                        _isPresent = true;
+                        _acqData.clear();
+                        for(int i = 0; i<MODBUS_NB_RAM_ACQUIS; i++)
+                            _acqData.append(data[i]);
+                    }
+                }
                 break;
         }
 
-        qCritical() << errorString;
-        emit ComError(errorString);
-    }
+        if(_curAccessingParams.command != e_CommandList_Default)
+            __log() << "MODBUS Command Done : " << QString::number((int)_curAccessingParams.command);
 
-    if(!_isConnected)
-    {
-        _lastError = MB_ENOERR;
-        _accessingParamsQueue.clear();
-        _isConnected = false;
-        _isPresent = false;
-        _isProcessing = false;
-        _dataRead.clear();
-//        _devAddr.clear();
-    }
+        if(_curAccessingParams.command != e_CommandList_Default || _isConnected)
+        {
+            emit Done((int)_curAccessingParams.command +
+                      ((int)_curAccessingParams.moduleId << 8) +
+                      ((!_noComError) << 15));
+        }
 
-    _isProcessing = false;
+        if(!_noComError)
+        {
+            QString errorString;
+            _lastError = (eMBErrorCode)(errno - MODBUS_ENOBASE);
+            switch(_lastError)
+            {
+                case MB_ENOERR:
+                    errorString = "No error";
+                    break;
+                case MB_ENOREG:
+                    errorString = "Illegal register address";
+                    break;
+                case MB_EINVAL:
+                    errorString = "Illegal argument";
+                    break;
+                case MB_EPORTERR:
+                    errorString = "Porting layer error";
+                    break;
+                case MB_ENORES:
+                    errorString = "Insufficient resources";
+                    break;
+                case MB_EIO:
+                    errorString = "I/O error";
+                    break;
+                case MB_EILLSTATE:
+                    errorString = "Protocol stack in illegal state";
+                    break;
+                case MB_ETIMEDOUT:
+                    errorString = "Timeout !";
+                    break;
+                default:
+                    _lastError = MB_ETIMEDOUT;
+                    errorString = "Unknown error !";
+                    break;
+            }
+
+            qCritical() << errorString;
+            emit ComError(errorString);
+        }
+
+        if(!_isConnected)
+        {
+            _lastError = MB_ENOERR;
+            _accessingParamsQueue.clear();
+            _isConnected = false;
+            _isPresent = false;
+            _dataRead.clear();
+    //        _devAddr.clear();
+        }
+    }
 }
 
 void QModbusTCP::DeviceConnected(QString peerName)
@@ -325,24 +344,6 @@ void QModbusTCP::DeviceDisconnected()
     _isConnected = false;
 //    _devAddr = "";
     emit TCPDisconnected();
-}
-
-void QModbusTCP::RepeatingProcess(void)
-{
-    if(!_isProcessing)
-    {
-        if(_accessingParamsQueue.isEmpty())
-        {
-            _curAccessingParams.moduleId = 0;
-            _curAccessingParams.command = e_CommandList_Default;
-        }
-        else
-        {
-            _curAccessingParams = _accessingParamsQueue.dequeue();
-        }
-        _isProcessing = true;
-        start(QThread::TimeCriticalPriority);
-    }
 }
 
 QModbusTCP::~QModbusTCP()

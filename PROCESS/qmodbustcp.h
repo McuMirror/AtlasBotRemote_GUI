@@ -84,19 +84,15 @@ class QModbusTCP : public QThread
         void TCPConnected(QString);
         void TCPDisconnected();
 
-    private slots:
-        void RepeatingProcess(void);
-
     private:
         modbus_t* _pModBus;
         QString _remoteHost;
         int _remotePort;
         bool _noComError;
-        QMutex *_pMutexRawData, *_pMutexDataRead, *_pMutexAcqData;
+        QMutex *_pMutexRawData, *_pMutexDataRead, *_pMutexAcqData, *_pMutexQueue;
         eMBErrorCode _lastError;
         bool _isConnected;
         bool _isPresent;
-        bool _isProcessing;
         QQueue<s_AccessingElm> _accessingParamsQueue;
         s_AccessingElm _curAccessingParams;
         QList<uint16_t> _dataRead;
