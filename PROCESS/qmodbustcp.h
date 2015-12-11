@@ -17,6 +17,7 @@ class QModbusTCP : public QThread
 #define MODBUS_DELAY_REFRESH        100
 #define MODBUS_NB_RAM_ACQUIS        MODBUS_READ_ONLY_REG_SIZE
 
+    public:
         enum eMBErrorCode
         {
             MB_ENOERR,                  /*!< no error. */
@@ -38,9 +39,10 @@ class QModbusTCP : public QThread
             e_CommandList_Disconnect
         };
 
+    private:
         struct s_AccessingElm
         {
-            uint16_t moduleId;
+            uint8_t moduleId;
             uint16_t startAddr;
             uint16_t length;
             e_CommandList command;
@@ -57,7 +59,7 @@ class QModbusTCP : public QThread
         inline int remotePort(void) const {return _remotePort;}
 
         void openTCPAndConnect(void);
-        void disconnect(void);
+        void disconnectFromDev(void);
         inline bool isConnected(void) const {return _isConnected;}
         inline bool isPresent(void) const {return _isPresent;}
         inline bool noComError(void) const {return _noComError;}
@@ -75,13 +77,13 @@ class QModbusTCP : public QThread
 
     public slots:
         void run();
-        void DeviceConnected(QString peerName);
+        void DeviceConnected();
         void DeviceDisconnected();
 
     signals:
         void Done(int);
         void ComError(QString);
-        void TCPConnected(QString);
+        void TCPConnected();
         void TCPDisconnected();
 
     private:
@@ -98,6 +100,7 @@ class QModbusTCP : public QThread
         QList<uint16_t> _dataRead;
         QList<uint16_t> _acqData;
         QList<int> _moduleIdentList;
+        bool _needThreadStop;
 };
 
 #endif // QMODBUSTCP_H

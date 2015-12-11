@@ -14,7 +14,8 @@
 QModbusTCP::QModbusTCP() :
     _pModBus(NULL),
     _remoteHost("127.0.0.1"),
-    _remotePort(502)
+    _remotePort(502),
+    _needThreadStop(false)
 {
     _pMutexRawData = new QMutex(QMutex::Recursive);
     _pMutexDataRead = new QMutex(QMutex::Recursive);
@@ -50,22 +51,25 @@ void QModbusTCP::openTCPAndConnect(void)
     {
         s_AccessingElm tmp;
         tmp.command = e_CommandList_Disconnect;
+        tmp.moduleId = 0;
         _accessingParamsQueue.enqueue(tmp);
     }
     else
     {
         s_AccessingElm tmp;
         tmp.command = e_CommandList_Connection;
+        tmp.moduleId = 0;
         _accessingParamsQueue.enqueue(tmp);
     }
 }
 
-void QModbusTCP::disconnect(void)
+void QModbusTCP::disconnectFromDev(void)
 {
     s_AccessingElm tmp;
     QMutexLocker locker(_pMutexQueue);
 
     tmp.command = e_CommandList_Disconnect;
+    tmp.moduleId = 0;
     _accessingParamsQueue.enqueue(tmp);
 }
 
@@ -179,6 +183,9 @@ void QModbusTCP::run()
 
     while(1)
     {
+        if(_needThreadStop)
+            break;
+
         locker.relock();
         if(_accessingParamsQueue.isEmpty())
         {
@@ -204,6 +211,7 @@ void QModbusTCP::run()
                 if(modbus_connect(_pModBus) != -1)
                 {
                     _isConnected = true;
+                    emit TCPConnected();
                 }
                 break;
             case e_CommandList_Disconnect:
@@ -322,21 +330,21 @@ void QModbusTCP::run()
             emit ComError(errorString);
         }
 
-        if(!_isConnected)
-        {
-            _lastError = MB_ENOERR;
-            _accessingParamsQueue.clear();
-            _isConnected = false;
-            _isPresent = false;
-            _dataRead.clear();
-    //        _devAddr.clear();
-        }
+//        if(!_isConnected)
+//        {
+//            _lastError = MB_ENOERR;
+//            _accessingParamsQueue.clear();
+//            _isConnected = false;
+//            _isPresent = false;
+//            _dataRead.clear();
+//    //        _devAddr.clear();
+//        }
     }
 }
 
-void QModbusTCP::DeviceConnected(QString peerName)
+void QModbusTCP::DeviceConnected()
 {
-    emit TCPConnected(peerName);
+    emit TCPConnected();
 }
 
 void QModbusTCP::DeviceDisconnected()
@@ -348,7 +356,7 @@ void QModbusTCP::DeviceDisconnected()
 
 QModbusTCP::~QModbusTCP()
 {
-    QThread::terminate();
+    _needThreadStop = true;
     QThread::wait();
 
     if(_pModBus != NULL)
