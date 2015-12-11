@@ -2,6 +2,7 @@
 #include "ui_atlasbotremote.h"
 
 #include <QDir>
+#include <QMessageBox>
 
 AtlasBotRemote::AtlasBotRemote(QWidget *parent) :
     QMainWindow(parent),
@@ -11,8 +12,8 @@ AtlasBotRemote::AtlasBotRemote(QWidget *parent) :
 
     /* Init Modbus TCP */
     _pModbusTCP = new QModbusTCP();
-    connect(_pModbusTCP, SIGNAL(Done(int)), this, SLOT(ModbusDone(int)));
-    connect(_pModbusTCP, SIGNAL(TCPConnected(QString)), this, SLOT(ConnectedToDevice(QString)));
+    connect(_pModbusTCP, SIGNAL(Done(int)),         this, SLOT(ModbusDone(int)));
+    connect(_pModbusTCP, SIGNAL(TCPConnected()),    this, SLOT(ConnectedToDevice()));
     connect(_pModbusTCP, SIGNAL(TCPDisconnected()), this, SLOT(DisconnectedFromDevice()));
 
     /* Settings */
@@ -25,6 +26,8 @@ AtlasBotRemote::AtlasBotRemote(QWidget *parent) :
     /* Dialog Preferences */
     _pDialogPref = new DialogPreferences(this);
     connect(ui->action_Settings, SIGNAL(triggered(bool)), this, SLOT(ShowPrefDialog()));
+
+    connect(ui->commandLinkButton_Connect, SIGNAL(clicked()), this, SLOT(ConnectDisconnect()));
 }
 
 void AtlasBotRemote::ShowPrefDialog()
@@ -44,12 +47,39 @@ void AtlasBotRemote::ShowPrefDialog()
     }
 }
 
-void AtlasBotRemote::ModbusDone(int result)
+void AtlasBotRemote::ConnectDisconnect()
 {
-
+    if(_pModbusTCP->isConnected())
+    {
+        _pModbusTCP->disconnectFromDev();
+    }
+    else
+    {
+        _pModbusTCP->openTCPAndConnect();
+    }
 }
 
-void AtlasBotRemote::ConnectedToDevice(QString peerName)
+void AtlasBotRemote::ModbusDone(int result)
+{
+    bool error;
+    uint16_t moduleId;
+
+    error = result & 0x8000;
+    moduleId = (result >> 8) & 0x007F;
+    result &= 0x00FF;
+
+    switch(result)
+    {
+        case QModbusTCP::e_CommandList_Connection:
+            if(!_pModbusTCP->isConnected())
+            {
+                QMessageBox::warning(this, "Error !", "Unable de connect device !");
+            }
+            break;
+    }
+}
+
+void AtlasBotRemote::ConnectedToDevice()
 {
 //    _connectedDevName = peerName;
 //    _connectedDevAddr = _pModbus->GetDeviceAddr();

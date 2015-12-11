@@ -22,9 +22,10 @@ class AtlasBotRemote : public QMainWindow
 
     private slots:
         void ShowPrefDialog(void);
+        void ConnectDisconnect(void);
         void ModbusDone(int result);
-        void ConnectedToDevice(QString peerName);
-        void DisconnectedFromDevice();
+        void ConnectedToDevice(void);
+        void DisconnectedFromDevice(void);
 
     private:
         Ui::AtlasBotRemote *ui;
